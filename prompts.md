@@ -1,6 +1,11 @@
 # Request log
 
 ## 2026-11-24
+- Asked: Add an Export results button for an Excel-compatible CSV and a Calculation sheet button for a PDF with inputs, diagrams, and checks.
+- Changed: Added CSV export at the plotted stations, a dependency-free vector PDF calculation-sheet generator, both Tkinter buttons, and corresponding output requirements to `spec.md`.
+- Worked: Yes; export smoke tests produced an 81-row CSV with the requested header and a valid `%PDF-1.4` file ending in `%%EOF`, compilation passed, and Pylance reported no errors.
+
+## 2026-11-24
 - Asked: Add a File menu with Save and Open for beam designs, and remove “Saving designs” from the spec’s Out of scope section.
 - Changed: Removed that out-of-scope item, added validated JSON save/open support for the beam state, added File menu commands and Ctrl+S/Ctrl+O shortcuts, and added error dialogs for invalid files.
 - Worked: Yes; the save-state round trip passed with support, span, material/section, deflection limit, and loads preserved, `py_compile` passed, and Pylance reported no errors.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import json
+import csv
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import filedialog, messagebox, ttk
@@ -287,6 +288,112 @@ def import_state(payload: object) -> dict:
             "deflection_limit": limit, "point_loads": point_loads, "uniform_loads": uniform_loads}
 
 
+def result_rows(state: dict, analysis: dict) -> list[dict[str, float]]:
+    """Return the plotted stations with all four exported result columns."""
+    material = MATERIALS[state["material"]]
+    section = next(item for item in material["sections"] if item.name == state["section"])
+    regular = {min(index * 0.25, analysis["span"]) for index in range(math.ceil(analysis["span"] / 0.25) + 1)}
+    stations = sorted(regular | set(breakpoints(analysis)))
+    point_positions = {load["position"] for load in analysis["loads"][0]}
+    samples = []
+    for x in stations:
+        moment = moment_at(x, analysis)
+        if 0 < x < analysis["span"] and x in point_positions:
+            samples.extend((
+                {"x": x, "shear": shear_at(x, "left", analysis), "moment": moment},
+                {"x": x, "shear": shear_at(x, "right", analysis), "moment": moment},
+            ))
+        else:
+            side = "left" if x == analysis["span"] else "right"
+            samples.append({"x": x, "shear": shear_at(x, side, analysis), "moment": moment})
+    return [
+        {
+            "x_ft": sample["x"], "shear_k": sample["shear"], "moment_kip_ft": sample["moment"],
+            "deflection_in": -1728 * deflection_shape(sample["x"], analysis) / (material["e"] * section.ix),
+        }
+        for sample in samples
+    ]
+
+
+def pdf_text(value: object) -> str:
+    return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def make_calculation_pdf(path: str, state: dict, analysis: dict) -> None:
+    """Write a dependency-free, vector PDF calculation sheet."""
+    commands: list[str] = ["0.15 0.18 0.22 RG 0.7 w", "40 570 m 752 570 l S", "0 0 0 rg"]
+
+    def text(x: float, y: float, value: object, size: float = 9, bold: bool = False) -> None:
+        font = "/F2" if bold else "/F1"
+        commands.append(f"BT {font} {size} Tf {x:.1f} {y:.1f} Td ({pdf_text(value)}) Tj ET")
+
+    def line(x1: float, y1: float, x2: float, y2: float, color: str = "0.20 0.31 0.40") -> None:
+        commands.append(f"{color} RG 0.8 w {x1:.1f} {y1:.1f} m {x2:.1f} {y2:.1f} l S")
+
+    text(40, 585, "BEAM DESIGN CALCULATION SHEET", 16, True)
+    text(40, 556, "Inputs", 11, True)
+    material_name = MATERIALS[state["material"]]["name"]
+    input_lines = [
+        f"Support: {'Cantilever' if state['support'] == 'cantilever' else 'Simply supported'}",
+        f"Span: {state['span']:g} ft    Material: {material_name}    Section: {state['section']}",
+        f"Deflection limit: L/{int(state['deflection_limit'])}    Point loads: {len(state['point_loads'])}    Uniform loads: {len(state['uniform_loads'])}",
+    ]
+    for index, value in enumerate(input_lines):
+        text(40, 540 - index * 14, value)
+    text(40, 490, "Diagrams", 11, True)
+    rows = result_rows(state, analysis)
+    series = [
+        ("Shear V (k)", "shear_k", 425, "0.09 0.31 0.54"),
+        ("Moment M (kip-ft)", "moment_kip_ft", 315, "0.14 0.47 0.29"),
+        ("Deflection y (in)", "deflection_in", 205, "0.65 0.36 0.03"),
+    ]
+    chart_left, chart_right = 85.0, 735.0
+    for title, key, baseline, color in series:
+        text(40, baseline + 43, title, 9, True)
+        line(chart_left, baseline, chart_right, baseline, "0.70 0.74 0.78")
+        maximum = max(1e-9, max(abs(row[key]) for row in rows))
+        points = []
+        for row in rows:
+            x = chart_left + row["x_ft"] / state["span"] * (chart_right - chart_left)
+            y = baseline + row[key] / maximum * 31
+            points.append((x, y))
+        if points:
+            commands.append(f"{color} RG 1.4 w " + " ".join(f"{x:.1f} {y:.1f} {'m' if index == 0 else 'l'}" for index, (x, y) in enumerate(points)) + " S")
+        text(chart_right + 5, baseline - 3, f"max {maximum:.3g}", 7)
+    text(40, 135, "Checks", 11, True)
+    bending = analysis["checks"]["bending"]
+    deflection = analysis["checks"]["deflection"]
+    text(40, 119, f"Bending: {bending['actual']:.3f} / {bending['allowable']:.3f} ksi — {'PASS' if bending['passes'] else 'FAIL'}")
+    text(40, 104, f"Deflection: {deflection['actual']:.3f} / {deflection['allowable']:.3f} in — {'PASS' if deflection['passes'] else 'FAIL'}")
+    text(40, 75, "PASS means only that the simplified bending and deflection checks in this app pass;", 7)
+    text(40, 63, "it is not a complete or code-compliant design. Independent professional review is required.", 7)
+    text(40, 30, "Beam Designer — Brigham Young University inspired calculation sheet", 7)
+
+    content = "\n".join(commands).encode("latin-1", "replace")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+        b"<< /Length " + str(len(content)).encode("ascii") + b" >>\nstream\n" + content + b"\nendstream",
+    ]
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, 1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{index} 0 obj\n".encode("ascii"))
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+    xref = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii"))
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
+    with open(path, "wb") as file:
+        file.write(pdf)
+
+
 class BeamDesigner(tk.Tk):
     BLUE, PALE, INK, WOOD, GOLD = "#002e5d", "#e9f1f8", "#172635", "#432819", "#d3ae79"
 
@@ -381,6 +488,34 @@ class BeamDesigner(tk.Tk):
         self.vars["span"].set(self.state["span"])
         self.refresh()
 
+    def export_results(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Export Beam Results", defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", newline="", encoding="utf-8-sig") as file:
+                writer = csv.writer(file)
+                writer.writerow(["x (ft)", "V (k)", "M (kip-ft)", "Deflection (in)"])
+                for row in result_rows(self.state, self.analysis):
+                    writer.writerow([f"{row['x_ft']:.6g}", f"{row['shear_k']:.6g}", f"{row['moment_kip_ft']:.6g}", f"{row['deflection_in']:.6g}"])
+        except OSError as error:
+            messagebox.showerror("Export failed", str(error), parent=self)
+
+    def export_calculation_sheet(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Export Calculation Sheet", defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            make_calculation_pdf(path, self.state, self.analysis)
+        except OSError as error:
+            messagebox.showerror("Export failed", str(error), parent=self)
+
     def label(self, parent: tk.Widget, text: str) -> None:
         ttk.Label(parent, text=text, style="Head.TLabel").pack(anchor="w", pady=(8, 5))
 
@@ -409,6 +544,10 @@ class BeamDesigner(tk.Tk):
         buttons.pack(fill="x", pady=8)
         ttk.Button(buttons, text="+ Point load", command=lambda: self.add_load("point")).pack(side="left", fill="x", expand=True, padx=(0, 4))
         ttk.Button(buttons, text="+ Uniform load", command=lambda: self.add_load("uniform")).pack(side="left", fill="x", expand=True)
+        export_buttons = ttk.Frame(self.left)
+        export_buttons.pack(fill="x", pady=(0, 8))
+        ttk.Button(export_buttons, text="Export results (CSV)", command=self.export_results).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        ttk.Button(export_buttons, text="Calculation sheet (PDF)", command=self.export_calculation_sheet).pack(side="left", fill="x", expand=True)
         self.status = tk.Label(self.left, text="", bg=self.PALE, fg="#a33a36", justify="left", anchor="w", wraplength=320, font=("Georgia", 9))
         self.status.pack(fill="x")
 

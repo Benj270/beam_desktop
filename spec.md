@@ -115,6 +115,10 @@ sizing a floor beam or deck joist.
   red over 100%), and PASS or FAIL.
 - A line suggesting the lightest passing section, with a button to use it.
 - Everything updates immediately whenever any input changes.
+- An "Export results" button saves a CSV table with x, shear V, moment M,
+  and deflection values along the beam for use in Excel.
+- A "Calculation sheet" button saves a PDF containing the inputs, diagrams,
+  design checks, and scope disclaimer in a hand-in-ready layout.
 - Show a prominent note that PASS only means the beam meets the simplified
   bending and deflection checks in this app; it is not a complete or
   code-compliant design.
