@@ -6,6 +6,19 @@ places loads on it, and picks a steel or lumber section. The app shows the
 shear, moment, and deflection diagrams and checks whether the beam is
 strong and stiff enough, updating instantly as anything changes.
 
+## Platform and implementation
+- Build the application in Python as a desktop application using the
+  standard-library Tkinter GUI toolkit.
+- Use Tkinter widgets for the controls, input panels, check cards, and
+  status messages. Use a Tkinter Canvas for the beam drawing, load arrows,
+  reactions, diagrams, labels, and synchronized hover crosshair.
+- Keep the calculation and validation logic separate from the Tkinter view
+  so it can be tested independently.
+- Launch the application in a resizable desktop window with a minimum size
+  that preserves the two-column layout. On narrower windows, retain the
+  desktop arrangement and allow horizontal scrolling rather than stacking
+  the panels for phone layouts.
+
 ## Users
 A civil engineering student checking a homework beam, or an engineer
 sizing a floor beam or deck joist.
@@ -153,11 +166,11 @@ Complete and test each stage before starting the next. Stage 1 is a static
 mockup only; later stages add behavior incrementally.
 
 1. **Static layout mockup (no calculations)**
-   - Build the desktop-focused page layout with fixed example inputs and
+   - Build the desktop-focused Tkinter window layout with fixed example inputs and
      placeholder beam, diagrams, checks, and section recommendation.
    - Apply the BYU-inspired blue-and-white treatment, Georgia typography,
      and prominent carved-wood Neo-Gothic frames.
-   - **Exit check:** Review at a desktop viewport of at least 1280 px wide.
+   - **Exit check:** Review at a desktop window at least 1280 px wide.
      Confirm inputs stay on the left, results stay on the right, and the
      ornate borders do not crowd labels, diagrams, or the disclaimer.
 2. **Inputs and load editing**
