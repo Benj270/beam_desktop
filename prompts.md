@@ -1,6 +1,11 @@
 # Request log
 
 ## 2026-11-24
+- Asked: Write a short `README.md` explaining what the app does, which packages to install, and the startup command.
+- Changed: Added a concise README documenting the Beam Designer features, standard-library/Tkinter dependency status, and Windows launch commands.
+- Worked: Yes; the README was created and committed.
+
+## 2026-11-24
 - Asked: Add an Export results button for an Excel-compatible CSV and a Calculation sheet button for a PDF with inputs, diagrams, and checks.
 - Changed: Added CSV export at the plotted stations, a dependency-free vector PDF calculation-sheet generator, both Tkinter buttons, and corresponding output requirements to `spec.md`.
 - Worked: Yes; export smoke tests produced an 81-row CSV with the requested header and a valid `%PDF-1.4` file ending in `%%EOF`, compilation passed, and Pylance reported no errors.
