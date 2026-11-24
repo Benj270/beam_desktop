@@ -1,6 +1,11 @@
 # Request log
 
 ## 2026-11-24
+- Asked: Run all validation cases in `spec.md` against the app's beam calculations and report expected versus actual values.
+- Changed: Executed the calculation functions with the project's `.venv`, compared cases 1–4 and the case 5 edge conditions, and reported the results in the response.
+- Worked: Yes; the specified numeric results and edge-case behaviors matched.
+
+## 2026-11-24
 - Asked: What is the command to run this app using `.venv\Scripts\activate.bat`?
 - Changed: Provided the Windows activation and launch commands for `beam_designer.py`.
 - Worked: Yes; the run command is ready to use from the project folder.
