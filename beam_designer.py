@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
+import json
 import tkinter as tk
 from dataclasses import dataclass
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Callable, Iterable
 
 
@@ -233,6 +234,59 @@ def checks(state: dict, analysis: dict, section: Section) -> dict:
     }
 
 
+def export_state(state: dict) -> dict:
+    """Return the user-editable beam state in a JSON-safe format."""
+    return {
+        "format": "beam-designer",
+        "version": 1,
+        "support": state["support"],
+        "span": state["span"],
+        "material": state["material"],
+        "section": state["section"],
+        "deflection_limit": state["deflection_limit"],
+        "point_loads": [
+            {"magnitude": load["magnitude"], "position": load["position"]}
+            for load in state["point_loads"]
+        ],
+        "uniform_loads": [
+            {"magnitude": load["magnitude"], "start": load["start"], "end": load["end"]}
+            for load in state["uniform_loads"]
+        ],
+    }
+
+
+def import_state(payload: object) -> dict:
+    """Validate and normalize a saved JSON document for the application."""
+    if not isinstance(payload, dict) or payload.get("format") != "beam-designer":
+        raise ValueError("This file is not a Beam Designer file.")
+    support = payload.get("support")
+    material = payload.get("material")
+    span = number(payload.get("span"))
+    limit = number(payload.get("deflection_limit"))
+    if support not in {"simple", "cantilever"} or material not in MATERIALS:
+        raise ValueError("The saved support type or material is invalid.")
+    if span is None or not 4 <= span <= 40 or limit not in {240, 360}:
+        raise ValueError("The saved span or deflection limit is invalid.")
+    section_names = {section.name for section in MATERIALS[material]["sections"]}
+    if payload.get("section") not in section_names:
+        raise ValueError("The saved section is invalid for the selected material.")
+
+    point_loads, uniform_loads = [], []
+    raw_points, raw_uniforms = payload.get("point_loads"), payload.get("uniform_loads")
+    if not isinstance(raw_points, list) or not isinstance(raw_uniforms, list):
+        raise ValueError("The saved loads are invalid.")
+    for load in raw_points:
+        if not isinstance(load, dict) or load_error("point", load):
+            raise ValueError("A saved point load is invalid.")
+        point_loads.append({"id": len(point_loads) + 1, "magnitude": float(load["magnitude"]), "position": float(load["position"])})
+    for load in raw_uniforms:
+        if not isinstance(load, dict) or load_error("uniform", load):
+            raise ValueError("A saved uniform load is invalid.")
+        uniform_loads.append({"id": len(uniform_loads) + 1, "magnitude": float(load["magnitude"]), "start": float(load["start"]), "end": float(load["end"])})
+    return {"support": support, "span": span, "material": material, "section": payload["section"],
+            "deflection_limit": limit, "point_loads": point_loads, "uniform_loads": uniform_loads}
+
+
 class BeamDesigner(tk.Tk):
     BLUE, PALE, INK, WOOD, GOLD = "#002e5d", "#e9f1f8", "#172635", "#432819", "#d3ae79"
 
@@ -265,6 +319,14 @@ class BeamDesigner(tk.Tk):
         style.configure("TCombobox", padding=3)
 
     def build_ui(self) -> None:
+        menu_bar = tk.Menu(self)
+        file_menu = tk.Menu(menu_bar, tearoff=False)
+        file_menu.add_command(label="Save", accelerator="Ctrl+S", command=self.save_design)
+        file_menu.add_command(label="Open", accelerator="Ctrl+O", command=self.open_design)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+        self.config(menu=menu_bar)
+        self.bind_all("<Control-s>", lambda _event: self.save_design())
+        self.bind_all("<Control-o>", lambda _event: self.open_design())
         header = tk.Frame(self, bg=self.BLUE, height=72, padx=20, pady=12)
         header.pack(fill="x")
         tk.Label(header, text="BEAM DESIGNER", bg=self.BLUE, fg="white", font=("Georgia", 21, "bold")).pack(side="left")
@@ -282,6 +344,42 @@ class BeamDesigner(tk.Tk):
         self.canvas.bind("<Configure>", lambda _event: self.draw())
         self.canvas.bind("<Motion>", self.inspect)
         self.canvas.bind("<Leave>", lambda _event: self.clear_inspection())
+
+    def save_design(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Save Beam Design", defaultextension=".json",
+            filetypes=[("Beam Designer JSON", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as file:
+                json.dump(export_state(self.state), file, indent=2)
+        except OSError as error:
+            messagebox.showerror("Save failed", str(error), parent=self)
+
+    def open_design(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open Beam Design",
+            filetypes=[("Beam Designer JSON", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as file:
+                loaded_state = import_state(json.load(file))
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            messagebox.showerror("Open failed", str(error), parent=self)
+            return
+        self.state = loaded_state
+        self.load_id = max((load["id"] for load in self.state["point_loads"] + self.state["uniform_loads"]), default=0) + 1
+        self.vars["support"].set("Cantilever" if self.state["support"] == "cantilever" else "Simply supported")
+        self.vars["material"].set("Steel W-shapes" if self.state["material"] == "steel" else "Douglas Fir-Larch No. 2")
+        self.vars["limit"].set(f"L/{int(self.state['deflection_limit'])}")
+        self.on_material()
+        self.vars["section"].set(self.state["section"])
+        self.vars["span"].set(self.state["span"])
+        self.refresh()
 
     def label(self, parent: tk.Widget, text: str) -> None:
         ttk.Label(parent, text=text, style="Head.TLabel").pack(anchor="w", pady=(8, 5))

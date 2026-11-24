@@ -1,6 +1,11 @@
 # Request log
 
 ## 2026-11-24
+- Asked: Add a File menu with Save and Open for beam designs, and remove “Saving designs” from the spec’s Out of scope section.
+- Changed: Removed that out-of-scope item, added validated JSON save/open support for the beam state, added File menu commands and Ctrl+S/Ctrl+O shortcuts, and added error dialogs for invalid files.
+- Worked: Yes; the save-state round trip passed with support, span, material/section, deflection limit, and loads preserved, `py_compile` passed, and Pylance reported no errors.
+
+## 2026-11-24
 - Asked: Run all validation cases in `spec.md` against the app's beam calculations and report expected versus actual values.
 - Changed: Executed the calculation functions with the project's `.venv`, compared cases 1–4 and the case 5 edge conditions, and reported the results in the response.
 - Worked: Yes; the specified numeric results and edge-case behaviors matched.

@@ -210,7 +210,6 @@ mockup only; later stages add behavior incrementally.
 ## Out of scope
 - Self-weight, shear stress, lateral-torsional buckling, load
   combinations, and continuous beams.
-- Saving designs.
 - The app does not verify connections, local buckling, code load
   combinations, or other omitted design requirements. Results are for
   learning and preliminary checks and require independent professional
